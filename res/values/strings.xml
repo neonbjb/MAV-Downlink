@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">MAVMapper</string>
+    <string name="app_name">MAV Downlink</string>
     <string name="action_settings">Settings</string>
-    <string name="begin_mapping">Start Forwarding MAV Data</string>
-    <string name="end_mapping">Stop Forwarding MAV Data</string>
+    <string name="begin_mapping">Start Downlink</string>
+    <string name="end_mapping">Stop Downlink</string>
     <string name="lblServerIP">Server IP:</string>
     <string name="lblServerPort">Server Port:</string>
     <string name="hintServerIP">10.0.0.125</string>

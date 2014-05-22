@@ -5,7 +5,7 @@
  * should not be modified by hand.
  */
 
-package com.appliedanalog.uav.mavmapper;
+package com.appliedanalog.uav.mavdownlink;
 
 public final class R {
     public static final class attr {

@@ -1,7 +1,8 @@
-package com.appliedanalog.uav.mavmapper;
+package com.appliedanalog.uav.mavdownlink;
 
 import java.net.Socket;
 
+import com.appliedanalog.uav.mavdownlink.R;
 import com.appliedanalog.uav.socketmapper.EndpointConnector;
 import com.appliedanalog.uav.socketmapper.EndpointListener;
 import com.appliedanalog.uav.socketmapper.IOEndpointAndroidSerial;
@@ -19,7 +20,7 @@ import android.widget.TextView;
 import android.widget.ToggleButton;
 
 public class MainActivity extends Activity {
-	final String TAG = "MavMapper";
+	final String TAG = "MavDownlink";
 	EditText tServerIP;
 	EditText tServerPort;
 	ToggleButton bStart;

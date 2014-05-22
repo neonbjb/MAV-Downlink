@@ -8,15 +8,13 @@
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context=".MainActivity" >
 
-    <ToggleButton
+    <Button
         android:id="@+id/bEnableMapper"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
-        android:text="@string/begin_mapping"
-        android:textOff="Start Forwarding MAV Data"
-        android:textOn="Stop Forwarding MAV Data" />
+        android:text="@string/start_downlink" />
 
     <EditText
         android:id="@+id/tServerIP"

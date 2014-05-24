@@ -44,7 +44,12 @@ public class MainActivity extends Activity {
 	Button bStart;
 	boolean downlinkActive = false;
 	Intent startIntent;
-	WakeLock wakelock;
+	WakeLock wakelock = null;
+	
+	//TODO: Move all of these to settings.
+	// When the screen wakelock is used, this is necessary to prevent unintentional turn-offs.
+	final boolean onlyDisableOnLongPress = true;
+	final int wakelockType = PowerManager.SCREEN_DIM_WAKE_LOCK;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -64,12 +69,16 @@ public class MainActivity extends Activity {
 			public void onClick(View arg0) {
 				String ip = tServerIP.getText().toString();
 				String port = tServerPort.getText().toString();
-				toggleMapper(ip, Integer.parseInt(port));
+				toggleMapper(ip, Integer.parseInt(port), false);
+				Log.v(TAG, "Start downlink - regular click.");
 			}
 		});
 		bStart.setOnLongClickListener(new OnLongClickListener(){
 			@Override
 			public boolean onLongClick(View arg0) {
+				String ip = tServerIP.getText().toString();
+				String port = tServerPort.getText().toString();
+				toggleMapper(ip, Integer.parseInt(port), true);
 				return true;
 			}
 		});
@@ -82,11 +91,6 @@ public class MainActivity extends Activity {
 		uiHandler = new UIHandler(Looper.getMainLooper());
 		
 		initializeLinkComponents();
-		
-		//This application uses a partial wake lock to keep the CPU going when the device's screen is off.
-		PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
-		wakelock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MAVDownlinkWakelock");
-		wakelock.acquire();
 	}
 	
 	@Override
@@ -177,6 +181,18 @@ public class MainActivity extends Activity {
 	void setDownlinkActiveState(boolean active){
 		sendUIMessage(SET_DOWNLINK_ACTIVE_STATE, active ? "Stop Downlink" : "Start Downlink");
 		downlinkActive = active;
+		
+		// Manage the wakelock.
+		if(downlinkActive){
+			Log.v(TAG, "Acquiring wakelock.");
+			//This application uses a partial wake lock to keep the CPU going when the device's screen is off.
+			PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+			wakelock = powerManager.newWakeLock(wakelockType, "MAVDownlinkWakelock");
+			wakelock.acquire();
+		}else if(wakelock != null){
+			Log.v(TAG, "Releasing wakelock.");
+			wakelock.release();
+		}
 	}
 	
 	IOEndpointAndroidSerial serialEndpoint;
@@ -273,13 +289,16 @@ public class MainActivity extends Activity {
 		setDownlinkActiveState(false);
 	}
 	
-	void toggleMapper(final String host, final int port){
+	void toggleMapper(final String host, final int port, final boolean longPress){
+		if(downlinkActive && onlyDisableOnLongPress && !longPress){
+			alert("You must longpress the button to disable the downlink.");
+		}
 		(new Thread(){
 			public void run(){
     			number_messages = 0;
 				if(!downlinkActive){
 					startEndpoints(host, port);
-				}else{
+				}else if(!onlyDisableOnLongPress || longPress){
 					stopEndpoints();
 				}
 			}

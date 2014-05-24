@@ -13,7 +13,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
@@ -36,12 +40,16 @@ public class MainActivity extends Activity {
 	ImageView iDownlinkStatus;
 	Button bStart;
 	boolean downlinkActive = false;
+	Intent startIntent;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		Log.v(TAG, "onCreate()");
 		setContentView(R.layout.activity_main);
 		me = this;
+		
+		startIntent = this.getIntent();
 		
 		// Setup UI variables
 		tServerIP = (EditText)findViewById(R.id.tServerIP);
@@ -52,7 +60,7 @@ public class MainActivity extends Activity {
 			public void onClick(View arg0) {
 				String ip = tServerIP.getText().toString();
 				String port = tServerPort.getText().toString();
-				toggleMapper(ip, port);
+				toggleMapper(ip, Integer.parseInt(port));
 			}
 		});
 		lNumberMessages = (TextView)findViewById(R.id.tMessageCount);
@@ -67,12 +75,23 @@ public class MainActivity extends Activity {
 	}
 	
 	@Override
+	public void onStart(){
+		super.onStart();
+		Log.v(TAG, "onStart()");
+		
+		if(!startIntent.getAction().equals(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)){
+			alert("Please launch this application by plugging the APM into the phone and selecting "
+					+ "'MAV Downlink' in the dialog that appears. The downlink cannot be used when launched manually.");
+			bStart.setEnabled(false);
+		}else{
+			bStart.setEnabled(true);
+		}
+	}
+	
+	@Override
 	protected void onDestroy(){
 		super.onDestroy();
-		connector.unbridge();
-		socketEndpoint.stop();
-		serialEndpoint.stopKeepAlive();
-		serialEndpoint.stop();
+		stopEndpoints();
 	}
 
 	@Override
@@ -147,7 +166,6 @@ public class MainActivity extends Activity {
 	IOEndpointAndroidSerial serialEndpoint;
 	IOEndpointSocket socketEndpoint;
 	EndpointConnector connector;
-	String last_host, last_port;
 	int number_messages = 0;
 	
 	class MavEndpointListener implements EndpointListener{
@@ -188,68 +206,88 @@ public class MainActivity extends Activity {
 		@Override
 		public void disconnected() {
 			setRedLight(iDownlinkStatus);
-			setDownlinkActiveState(false);
 		}
 	}
 	
 	void initializeLinkComponents(){
 		serialEndpoint = new IOEndpointAndroidSerial(this);
 		serialEndpoint.setEndpointListener(new MavEndpointListener());
-		serialEndpoint.startKeepAlive();
 		socketEndpoint = new IOEndpointSocket();
 		socketEndpoint.setEndpointListener(new DownlinkEndpointListener());
 		
 		connector = new EndpointConnector(serialEndpoint, socketEndpoint);
 	}
 	
-	void toggleMapper(final String host, final String port){
+	void startEndpoints(String host, int port){
+		Log.v(TAG, "Toggle downlink ON");
+        try{
+        	Log.v(TAG, "Booting up socket/downlink endpoint..");
+			if(!socketEndpoint.connected()){
+				//We'll need to re-connect.
+				if(socketEndpoint.connected()){
+					shortToast("Reconnecting..");
+					socketEndpoint.stop();
+				}
+    			socketEndpoint.bind(host, port);
+    			socketEndpoint.startKeepAlive();
+			}else{
+				Log.v(TAG, "Socket already connected to this host, re-opening bridge.");
+			}
+			
+			Log.v(TAG, "Booting up FTDI endpoint..");
+			serialEndpoint.startKeepAlive();
+			
+    		connector.bridge();
+    		Log.v(TAG, "Connections bridged");
+    		shortToast("Downlink connection established.");
+			setDownlinkActiveState(true);
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+	}
+	
+	void stopEndpoints(){
+		Log.v(TAG, "Toggle downlink OFF");
+		connector.unbridge();
+		Log.v(TAG, "Shutting down FTDI endpoint..");
+		serialEndpoint.stop();
+		Log.v(TAG, "Shutting down socket endpoint..");
+		socketEndpoint.stop();
+		Log.v(TAG, "Should be shut down now.");
+		setDownlinkActiveState(false);
+	}
+	
+	void toggleMapper(final String host, final int port){
 		(new Thread(){
 			public void run(){
     			number_messages = 0;
 				if(!downlinkActive){
-			        try{
-		    			if(!socketEndpoint.connected() || !host.equals(last_host) || !port.equals(last_port)){
-		    				//We'll need to re-connect.
-		    				if(socketEndpoint.connected()){
-		    					shortToast("Reconnecting..");
-		    					socketEndpoint.stop();
-		    				}
-		    				last_host = null;
-		    				last_port = null;
-
-			    			Log.v(TAG, "Connecting to " + host + " on port " + port);
-			    			Socket sock = null;
-			    			try{
-			    				sock = new Socket(host, Integer.parseInt(port));
-			    			}catch(Exception e){}
-			    			if(sock != null && sock.isConnected()){
-				    			socketEndpoint.bind(sock);
-				    			socketEndpoint.start();
-			    				last_host = host;
-			    				last_port = port;
-			    			}else{
-			    				Log.v(TAG, "Error connecting.");
-			    				shortToast("Error connecting to MAV downlink server.");
-			    			}
-		    			}else{
-		    				Log.v(TAG, "Socket already connected to this host, re-opening bridge.");
-		    			}
-		    			
-			    		connector.bridge();
-			    		Log.v(TAG, "Connections bridged");
-			    		shortToast("Downlink connection established.");
-			    		last_host = host;
-			    		last_port = port;
-			        }catch(Exception e){
-			            e.printStackTrace();
-			        }
+					startEndpoints(host, port);
 				}else{
-					connector.unbridge();
-					Log.v(TAG, "Shutting down socket endpoint..");
-					socketEndpoint.stop();
-					Log.v(TAG, "Should be shut down now.");
+					stopEndpoints();
 				}
 			}
 		}).start();
 	}
+	
+	String _alert_text; //vulnerable to threading..
+    void alert(String msg){
+    	_alert_text = msg;
+    	showDialog(DIALOG_ALERT);
+    }
+    final int DIALOG_ALERT = 0;
+    protected Dialog onCreateDialog(int id){
+    	Dialog dialog = null;
+    	switch(id){
+    	case DIALOG_ALERT:
+        	AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        	builder.setMessage(_alert_text)
+        		   .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+    				public void onClick(DialogInterface dialog, int which) { }
+    			});
+        	dialog = builder.create();
+        	break;
+    	}
+    	return dialog;
+    }
 }

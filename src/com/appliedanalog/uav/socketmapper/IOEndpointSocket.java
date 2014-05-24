@@ -4,15 +4,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
+import android.util.Log;
+
 /**
  * Implements an IO endpoint using a network socket.
  */
-public class IOEndpointSocket implements IOEndpoint, Runnable{
+public class IOEndpointSocket extends IOEndpoint implements Runnable{
     Socket socket;
     boolean running;
     Thread myThread;
-    EndpointDataListener endpointConnection;
-    EndpointListener endpointListener;
     
     public IOEndpointSocket(){
         socket = null;
@@ -29,17 +29,15 @@ public class IOEndpointSocket implements IOEndpoint, Runnable{
         socket = sock;
     }
     
-    public boolean connected(){
-        return socket != null && socket.isConnected();
-    }
-
-    @Override
-    public void setDataListener(EndpointDataListener edl) {
-        endpointConnection = edl;
+    String boundIp = null;
+    int boundPort = -1;
+    public void bind(String ip, int port){
+    	boundIp = ip;
+    	boundPort = port;
     }
     
-    public void setEndpointListener(EndpointListener listener){
-    	endpointListener = listener;
+    public boolean connected(){
+        return socket != null && socket.isConnected();
     }
     
     @Override
@@ -75,17 +73,27 @@ public class IOEndpointSocket implements IOEndpoint, Runnable{
             	e.printStackTrace();
             }
         }
-        running = false;
-        socket = null;
+        stopEndpoint();
     }
 
     @Override
     public void start() {
+    	// This is tricky because the IOEndpointSocket has two methods for starting up. It can use the bound socket or
+    	// the bound IP address. The socket takes precedence.
+    	if(socket == null && boundIp != null){
+    		//attempt reconnect using the ip address if available.
+    		try{
+    			Log.v(TAG, "No socket bound. Attepting to connect with given IP address.");
+    			socket = new Socket(boundIp, boundPort);
+    		}catch(Exception e){
+    			Log.e(TAG, "Failed to start up socket endpoint due to socket error: " + e.getMessage());
+    		}
+    	}
         socketEndpointStart();
     }
     
     void socketEndpointStart(){
-        if(running) return;
+        if(running || socket == null) return;
         running = true;
         myThread = new Thread(this);
         myThread.start();
@@ -93,19 +101,26 @@ public class IOEndpointSocket implements IOEndpoint, Runnable{
     }
 
     @Override
-    public void stop() {
+    public void stopEndpoint() {
     	if(!running) return;
         running = false;
         if(socket != null){
 	        try{
 	            socket.close();
-	            myThread.interrupt();
-	            myThread.join();
 	            socket = null;
+	            if(myThread.isAlive()){
+	            	myThread.interrupt();
+		            myThread.join();
+	            }
 	        }catch(Exception e){
 	            e.printStackTrace();
 	        }
         }
         if(endpointListener != null) endpointListener.disconnected();
     }
+	
+	@Override
+	public boolean isActive(){
+		return running;
+	}
 }

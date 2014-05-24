@@ -12,6 +12,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -22,6 +24,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -41,6 +44,7 @@ public class MainActivity extends Activity {
 	Button bStart;
 	boolean downlinkActive = false;
 	Intent startIntent;
+	WakeLock wakelock;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +67,12 @@ public class MainActivity extends Activity {
 				toggleMapper(ip, Integer.parseInt(port));
 			}
 		});
+		bStart.setOnLongClickListener(new OnLongClickListener(){
+			@Override
+			public boolean onLongClick(View arg0) {
+				return true;
+			}
+		});
 		lNumberMessages = (TextView)findViewById(R.id.tMessageCount);
 		iMavStatus = (ImageView)findViewById(R.id.iMavLinkStatus);
 		iDownlinkStatus = (ImageView)findViewById(R.id.iDownlinkStatus);
@@ -72,6 +82,11 @@ public class MainActivity extends Activity {
 		uiHandler = new UIHandler(Looper.getMainLooper());
 		
 		initializeLinkComponents();
+		
+		//This application uses a partial wake lock to keep the CPU going when the device's screen is off.
+		PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+		wakelock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MAVDownlinkWakelock");
+		wakelock.acquire();
 	}
 	
 	@Override
@@ -92,6 +107,7 @@ public class MainActivity extends Activity {
 	protected void onDestroy(){
 		super.onDestroy();
 		stopEndpoints();
+		wakelock.release();
 	}
 
 	@Override

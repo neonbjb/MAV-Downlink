@@ -7,8 +7,8 @@
     <string name="stop_downlink">Stop Downlink</string>
     <string name="lblServerIP">Server IP:</string>
     <string name="lblServerPort">Server Port:</string>
-    <string name="hintServerIP">10.0.0.125</string>
-    <string name="hintPort">9000</string>
+    <string name="hintServerIP">0.0.0.0</string>
+    <string name="hintPort">9999</string>
     <string name="number_messages">Messages:</string>
     <string name="mav_status">MAVLink:</string>
     <string name="downlink_status">Downlink:</string>

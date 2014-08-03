@@ -1,7 +1,5 @@
 package com.appliedanalog.uav.mavdownlink;
 
-import java.net.Socket;
-
 import com.appliedanalog.uav.mavdownlink.R;
 import com.appliedanalog.uav.socketmapper.EndpointConnector;
 import com.appliedanalog.uav.socketmapper.EndpointListener;
@@ -20,6 +18,7 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
@@ -30,11 +29,10 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
 public class MainActivity extends Activity {
 	final String TAG = "MavDownlink";
-	Context me;
+	Activity me;
 	Handler uiHandler;
 	EditText tServerIP;
 	EditText tServerPort;
@@ -50,6 +48,10 @@ public class MainActivity extends Activity {
 	// When the screen wakelock is used, this is necessary to prevent unintentional turn-offs.
 	final boolean onlyDisableOnLongPress = true;
 	final int wakelockType = PowerManager.SCREEN_DIM_WAKE_LOCK;
+	
+	//Shared preferences keys
+	final String USER_DFL_IP = "UserDefaultIP";
+	final String USER_DFL_PORT = "UserDefaultPort";
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -69,6 +71,12 @@ public class MainActivity extends Activity {
 			public void onClick(View arg0) {
 				String ip = tServerIP.getText().toString();
 				String port = tServerPort.getText().toString();
+				//save to shared prefs
+				SharedPreferences.Editor ed = me.getPreferences(0).edit();
+				ed.putString(USER_DFL_IP, ip);
+				ed.putString(USER_DFL_PORT, port);
+				ed.commit();
+				
 				toggleMapper(ip, Integer.parseInt(port), false);
 				Log.v(TAG, "Start downlink - regular click.");
 			}
@@ -86,8 +94,11 @@ public class MainActivity extends Activity {
 		iMavStatus = (ImageView)findViewById(R.id.iMavLinkStatus);
 		iDownlinkStatus = (ImageView)findViewById(R.id.iDownlinkStatus);
 		
-		tServerIP.setText("neonbjb.noip.me");
-		tServerPort.setText("9999");
+		// Load default text field values
+		SharedPreferences prefs = this.getPreferences(0);
+		tServerIP.setText(prefs.getString(USER_DFL_IP, ""));
+		tServerPort.setText(prefs.getString(USER_DFL_PORT, "9999"));
+		
 		uiHandler = new UIHandler(Looper.getMainLooper());
 		
 		initializeLinkComponents();
@@ -110,6 +121,7 @@ public class MainActivity extends Activity {
 	@Override
 	protected void onDestroy(){
 		super.onDestroy();
+		Log.v(TAG, "onDestroy()");
 		stopEndpoints();
 		wakelock.release();
 	}
@@ -292,7 +304,9 @@ public class MainActivity extends Activity {
 	void toggleMapper(final String host, final int port, final boolean longPress){
 		if(downlinkActive && onlyDisableOnLongPress && !longPress){
 			alert("You must longpress the button to disable the downlink.");
+			return;
 		}
+		
 		(new Thread(){
 			public void run(){
     			number_messages = 0;

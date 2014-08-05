@@ -71,6 +71,7 @@ public class MainActivity extends Activity {
 			public void onClick(View arg0) {
 				String ip = tServerIP.getText().toString();
 				String port = tServerPort.getText().toString();
+				
 				//save to shared prefs
 				SharedPreferences.Editor ed = me.getPreferences(0).edit();
 				ed.putString(USER_DFL_IP, ip);
@@ -122,8 +123,12 @@ public class MainActivity extends Activity {
 	protected void onDestroy(){
 		super.onDestroy();
 		Log.v(TAG, "onDestroy()");
-		stopEndpoints();
-		wakelock.release();
+		if(downlinkActive){
+			stopEndpoints();
+		}
+		if(wakelock != null){
+			wakelock.release();
+		}
 	}
 
 	@Override

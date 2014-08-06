@@ -1,3 +1,21 @@
+/*
+	MAV Downlink - A MAVLink Interface App for Android Smartphones
+	Copyright (C) 2014 James Betker, Applied Analog LLC
+	
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+	GNU General Public License for more details.
+	
+	You should have received a copy of the GNU General Public License
+	along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package com.appliedanalog.uav.socketmapper;
 
 import java.io.IOException;
@@ -16,9 +34,9 @@ import com.hoho.android.usbserial.driver.UsbSerialProber;
 
 public class IOEndpointAndroidSerial extends IOEndpoint implements Runnable {
 	final String TAG = "MavDownlink";
-	final int BAUD_RATE = 115200;
 	CommonUsbSerialDriver serialDriver = null;
 	String serialDriverUsbName = null;
+	int baudRate = 115200;
 	
     Context context;
     Semaphore startSem = new Semaphore(1);
@@ -26,8 +44,13 @@ public class IOEndpointAndroidSerial extends IOEndpoint implements Runnable {
     Thread myThread;
     boolean running = false;
     
-    public IOEndpointAndroidSerial(Context cont){
+    public IOEndpointAndroidSerial(Context cont, int baud){
     	context = cont;
+    	baudRate = baud;
+    }
+    
+    public int getBaudRate(){
+    	return baudRate;
     }
 
     final int MAX_ERRORS_BEFORE_DEAD = 5;
@@ -136,11 +159,11 @@ public class IOEndpointAndroidSerial extends IOEndpoint implements Runnable {
 			}
 			else
 			{	
-				Log.v(TAG, "Opening using Baud rate " + BAUD_RATE);
+				Log.v(TAG, "Opening using Baud rate " + baudRate);
 				try {
 				    serialDriver.open();
 				    UsbDevice dev = serialDriver.getDevice();
-				    serialDriver.setParameters(BAUD_RATE, 8, UsbSerialDriver.STOPBITS_1, UsbSerialDriver.PARITY_NONE);
+				    serialDriver.setParameters(baudRate, 8, UsbSerialDriver.STOPBITS_1, UsbSerialDriver.PARITY_NONE);
 				} catch (IOException e) {
 				    Log.e(TAG, "Error setting up device: " + e.getMessage(), e);
 					try {

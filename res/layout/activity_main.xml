@@ -28,28 +28,6 @@
         android:hint="@string/hintServerIP" />
 
     <TextView
-        android:id="@+id/textView2"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignBaseline="@+id/tServerPort"
-        android:layout_alignBottom="@+id/tServerPort"
-        android:layout_toLeftOf="@+id/tServerIP"
-        android:text="@string/lblServerPort" />
-
-    <EditText
-        android:id="@+id/tServerPort"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignLeft="@+id/tServerIP"
-        android:layout_below="@+id/tServerIP"
-        android:layout_toLeftOf="@string/lblServerPort"
-        android:ems="10"
-        android:hint="@string/hintPort" >
-
-        <requestFocus />
-    </EditText>
-
-    <TextView
         android:id="@+id/textView1"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -62,9 +40,9 @@
         android:id="@+id/textView3"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/tServerPort"
+        android:layout_below="@+id/tServerIP"
         android:layout_marginTop="21dp"
-        android:layout_toRightOf="@+id/textView2"
+        android:layout_toRightOf="@+id/textView1"
         android:text="@string/number_messages" />
 
     <TextView
@@ -73,7 +51,7 @@
         android:layout_height="wrap_content"
         android:layout_alignBaseline="@+id/textView3"
         android:layout_alignBottom="@+id/textView3"
-        android:layout_alignRight="@+id/tServerPort"
+        android:layout_alignRight="@+id/tServerIP"
         android:layout_marginLeft="15dp"
         android:layout_toRightOf="@+id/textView3"
         android:text="0" />

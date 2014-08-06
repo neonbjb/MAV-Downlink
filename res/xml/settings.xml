@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+  xmlns:android="http://schemas.android.com/apk/res/android">
+<EditTextPreference android:title="@string/tcp_port" 
+    				android:key="tcp_port" 
+    				android:summary="@string/tcp_port_desc" 
+    				android:defaultValue="9999"></EditTextPreference>
+<ListPreference android:key="baud_rate" 
+    			android:title="@string/baud_rate" 
+    			android:summary="@string/baud_rate_desc" 
+    			android:entryValues="@array/baud_rate_values" 
+    			android:entries="@array/baud_rate_values" 
+    			android:defaultValue="115800"></ListPreference>
+<CheckBoxPreference android:title="@string/keep_screen_on" 
+    				android:key="keep_screen_on" 
+    				android:summary="@string/keep_screen_on_desc" 
+    				android:defaultValue="true"></CheckBoxPreference>
+</PreferenceScreen>

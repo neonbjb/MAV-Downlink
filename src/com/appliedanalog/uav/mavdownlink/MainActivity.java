@@ -1,3 +1,21 @@
+/*
+	MAV Downlink - A MAVLink Interface App for Android Smartphones
+	Copyright (C) 2014 James Betker, Applied Analog LLC
+	
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+	GNU General Public License for more details.
+	
+	You should have received a copy of the GNU General Public License
+	along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package com.appliedanalog.uav.mavdownlink;
 
 import com.appliedanalog.uav.mavdownlink.R;
@@ -12,6 +30,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
+import android.preference.PreferenceActivity;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -21,6 +40,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnLongClickListener;
@@ -35,14 +55,16 @@ public class MainActivity extends Activity {
 	Activity me;
 	Handler uiHandler;
 	EditText tServerIP;
-	EditText tServerPort;
 	TextView lNumberMessages;
 	ImageView iMavStatus;
 	ImageView iDownlinkStatus;
 	Button bStart;
 	boolean downlinkActive = false;
 	Intent startIntent;
-	WakeLock wakelock = null;
+	WakeLock screenWakelock = null;
+	WakeLock cpuWakelock = null;
+	
+	int connectedPort = 9999; //The port that we are connected to.
 	
 	//TODO: Move all of these to settings.
 	// When the screen wakelock is used, this is necessary to prevent unintentional turn-offs.
@@ -51,7 +73,9 @@ public class MainActivity extends Activity {
 	
 	//Shared preferences keys
 	final String USER_DFL_IP = "UserDefaultIP";
-	final String USER_DFL_PORT = "UserDefaultPort";
+	final String TCP_PORT = "tcp_port";
+	final String BAUD_RATE = "baud_rate";
+	final String SCREEN_KEEPALIVE = "keep_screen_on";
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -64,21 +88,18 @@ public class MainActivity extends Activity {
 		
 		// Setup UI variables
 		tServerIP = (EditText)findViewById(R.id.tServerIP);
-		tServerPort = (EditText)findViewById(R.id.tServerPort);
 		bStart = (Button)findViewById(R.id.bEnableMapper);
 		bStart.setOnClickListener(new OnClickListener(){
 			@Override
 			public void onClick(View arg0) {
 				String ip = tServerIP.getText().toString();
-				String port = tServerPort.getText().toString();
 				
 				//save to shared prefs
 				SharedPreferences.Editor ed = me.getPreferences(0).edit();
 				ed.putString(USER_DFL_IP, ip);
-				ed.putString(USER_DFL_PORT, port);
 				ed.commit();
 				
-				toggleMapper(ip, Integer.parseInt(port), false);
+				toggleMapper(ip, false);
 				Log.v(TAG, "Start downlink - regular click.");
 			}
 		});
@@ -86,8 +107,7 @@ public class MainActivity extends Activity {
 			@Override
 			public boolean onLongClick(View arg0) {
 				String ip = tServerIP.getText().toString();
-				String port = tServerPort.getText().toString();
-				toggleMapper(ip, Integer.parseInt(port), true);
+				toggleMapper(ip, true);
 				return true;
 			}
 		});
@@ -98,7 +118,11 @@ public class MainActivity extends Activity {
 		// Load default text field values
 		SharedPreferences prefs = this.getPreferences(0);
 		tServerIP.setText(prefs.getString(USER_DFL_IP, ""));
-		tServerPort.setText(prefs.getString(USER_DFL_PORT, "9999"));
+		
+		// Initialize wake locks
+		PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
+		screenWakelock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "MAVDownlinkScreenWakelock");
+		cpuWakelock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MAVDownlinkCPUWakelock");
 		
 		uiHandler = new UIHandler(Looper.getMainLooper());
 		
@@ -126,9 +150,7 @@ public class MainActivity extends Activity {
 		if(downlinkActive){
 			stopEndpoints();
 		}
-		if(wakelock != null){
-			wakelock.release();
-		}
+		releaseWakelocks();
 	}
 
 	@Override
@@ -177,6 +199,42 @@ public class MainActivity extends Activity {
 		}
 	}
 	
+	// Custom intent types
+	final int PREFS_CHANGED = 15;
+	
+	@Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+		SharedPreferences prefs = getPreferences(0);
+		
+		if(requestCode == PREFS_CHANGED)
+		{
+			int newPort = getPrefsPort();
+			if(downlinkActive && socketEndpoint != null && connectedPort != newPort){
+				socketEndpoint.changePort(getPrefsPort());
+			}
+			if(Integer.toString(serialEndpoint.getBaudRate()).equals(prefs.getString(BAUD_RATE, "115200"))){
+				Log.v(TAG, "Baud rate changed, exiting application.");
+				System.exit(0);
+			}
+			//Refresh wakelock
+			releaseWakelocks();
+			acquireProperWakelock();
+		}
+	}
+		
+	@Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle item selection
+        switch (item.getItemId()) {
+        case R.id.action_settings:
+        	Intent i = new Intent(this, Settings.class);
+			startActivityForResult(i, PREFS_CHANGED);
+        	return true;
+        default:
+            return super.onOptionsItemSelected(item);
+        }
+	}
+	
 	//These functions all use the UI handler and thus can be called from outside
 	//the UI thread context.
 	void sendUIMessage(int what, Object obj){
@@ -201,14 +259,9 @@ public class MainActivity extends Activity {
 		
 		// Manage the wakelock.
 		if(downlinkActive){
-			Log.v(TAG, "Acquiring wakelock.");
-			//This application uses a partial wake lock to keep the CPU going when the device's screen is off.
-			PowerManager powerManager = (PowerManager)getSystemService(POWER_SERVICE);
-			wakelock = powerManager.newWakeLock(wakelockType, "MAVDownlinkWakelock");
-			wakelock.acquire();
-		}else if(wakelock != null){
-			Log.v(TAG, "Releasing wakelock.");
-			wakelock.release();
+			acquireProperWakelock();
+		}else{
+			releaseWakelocks();
 		}
 	}
 	
@@ -259,7 +312,9 @@ public class MainActivity extends Activity {
 	}
 	
 	void initializeLinkComponents(){
-		serialEndpoint = new IOEndpointAndroidSerial(this);
+		SharedPreferences prefs = getPreferences(0);
+		int baud = Integer.parseInt(prefs.getString(BAUD_RATE, "115200"));
+		serialEndpoint = new IOEndpointAndroidSerial(this, baud);
 		serialEndpoint.setEndpointListener(new MavEndpointListener());
 		socketEndpoint = new IOEndpointSocket();
 		socketEndpoint.setEndpointListener(new DownlinkEndpointListener());
@@ -306,16 +361,46 @@ public class MainActivity extends Activity {
 		setDownlinkActiveState(false);
 	}
 	
-	void toggleMapper(final String host, final int port, final boolean longPress){
+	int getPrefsPort(){
+		SharedPreferences prefs = getPreferences(0);
+		int port = 9999;
+		try{
+			port = Integer.parseInt(prefs.getString(TCP_PORT, "9999"));
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+		return port;
+	}
+
+	void acquireProperWakelock(){
+		SharedPreferences prefs = getPreferences(0);
+		if(prefs.getBoolean(SCREEN_KEEPALIVE, true)){
+			Log.v(TAG, "Acquiring screen wakelock.");
+			screenWakelock.acquire();
+		}else{
+			Log.v(TAG, "Acquiring CPU wakelock.");
+			cpuWakelock.acquire();
+		}
+	}
+	
+	void releaseWakelocks(){
+		Log.v(TAG, "Releasing wakelocks.");
+		screenWakelock.release();
+		cpuWakelock.release();
+	}
+	
+	void toggleMapper(final String host, final boolean longPress){
 		if(downlinkActive && onlyDisableOnLongPress && !longPress){
 			alert("You must longpress the button to disable the downlink.");
 			return;
 		}
+		final int port = getPrefsPort();
 		
 		(new Thread(){
 			public void run(){
     			number_messages = 0;
 				if(!downlinkActive){
+					connectedPort = port;
 					startEndpoints(host, port);
 				}else if(!onlyDisableOnLongPress || longPress){
 					stopEndpoints();

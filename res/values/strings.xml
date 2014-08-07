@@ -17,7 +17,7 @@
     <string name="tcp_port">TCP Port</string>
     <string name="tcp_port_desc">The TCP port to be used to connect to the downlink server.</string>
     <string name="baud_rate">Baud Rate</string>
-    <string name="baud_rate_desc">The baud rate for the serial connection with the autopilot board.</string>
+    <string name="baud_rate_desc">The baud rate for the serial connection with the autopilot board. Changing this will reset the app.</string>
     <string name="keep_screen_on">Keep Screen On</string>
     <string name="keep_screen_on_desc">Whether or not to keep the screen on when connected. Recommended setting.</string>
 	<string-array name="baud_rate_values">

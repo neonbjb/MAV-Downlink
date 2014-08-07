@@ -31,6 +31,7 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.preference.PreferenceActivity;
+import android.preference.PreferenceManager;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -64,18 +65,8 @@ public class MainActivity extends Activity {
 	WakeLock screenWakelock = null;
 	WakeLock cpuWakelock = null;
 	
-	int connectedPort = 9999; //The port that we are connected to.
-	
-	//TODO: Move all of these to settings.
-	// When the screen wakelock is used, this is necessary to prevent unintentional turn-offs.
+	//TODO: Move to settings.
 	final boolean onlyDisableOnLongPress = true;
-	final int wakelockType = PowerManager.SCREEN_DIM_WAKE_LOCK;
-	
-	//Shared preferences keys
-	final String USER_DFL_IP = "UserDefaultIP";
-	final String TCP_PORT = "tcp_port";
-	final String BAUD_RATE = "baud_rate";
-	final String SCREEN_KEEPALIVE = "keep_screen_on";
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -95,7 +86,7 @@ public class MainActivity extends Activity {
 				String ip = tServerIP.getText().toString();
 				
 				//save to shared prefs
-				SharedPreferences.Editor ed = me.getPreferences(0).edit();
+				SharedPreferences.Editor ed = PreferenceManager.getDefaultSharedPreferences(me).edit();
 				ed.putString(USER_DFL_IP, ip);
 				ed.commit();
 				
@@ -116,7 +107,7 @@ public class MainActivity extends Activity {
 		iDownlinkStatus = (ImageView)findViewById(R.id.iDownlinkStatus);
 		
 		// Load default text field values
-		SharedPreferences prefs = this.getPreferences(0);
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);;
 		tServerIP.setText(prefs.getString(USER_DFL_IP, ""));
 		
 		// Initialize wake locks
@@ -153,6 +144,7 @@ public class MainActivity extends Activity {
 		releaseWakelocks();
 	}
 
+	// Handles option menu creation.
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.
@@ -160,8 +152,49 @@ public class MainActivity extends Activity {
 		return true;
 	}
 	
+	// Custom intent types
+	final int PREFS_CHANGED = 15;
+
+	// Handler for when an options menu item is selected.
+	@Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle item selection
+        switch (item.getItemId()) {
+        case R.id.action_settings:
+        	//Shutdown downlink since settings changes may affect how it works.
+        	if(downlinkActive){
+        		stopEndpoints();
+        	}
+        	Intent i = new Intent(this, Settings.class);
+			startActivityForResult(i, PREFS_CHANGED);
+        	return true;
+        default:
+            return super.onOptionsItemSelected(item);
+        }
+	}
+	
+	// Handler for when a launched sub-activity returns with a result (e.g. Settings)
+	@Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+		Log.v(TAG, "onActivityResult requestCode=" + requestCode);
+		
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		if(requestCode == PREFS_CHANGED)
+		{
+			if(!Integer.toString(serialEndpoint.getBaudRate()).equals(prefs.getString(BAUD_RATE, DEFAULT_BAUD))){
+				Log.v(TAG, "Baud rate changed, exiting application.");
+				finish();
+				System.exit(0);
+			}
+			//Refresh wakelock
+			releaseWakelocks();
+			acquireProperWakelock();
+		}
+	}
+
+	
 	/**
-	 * Handles actions on the UI thread
+	 * Handles actions on the UI thread, allowing external threads to call in.
 	 */
 	final int SET_IMG_GREEN = 1;
 	final int SET_IMG_RED = 2;
@@ -199,42 +232,6 @@ public class MainActivity extends Activity {
 		}
 	}
 	
-	// Custom intent types
-	final int PREFS_CHANGED = 15;
-	
-	@Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data){
-		SharedPreferences prefs = getPreferences(0);
-		
-		if(requestCode == PREFS_CHANGED)
-		{
-			int newPort = getPrefsPort();
-			if(downlinkActive && socketEndpoint != null && connectedPort != newPort){
-				socketEndpoint.changePort(getPrefsPort());
-			}
-			if(Integer.toString(serialEndpoint.getBaudRate()).equals(prefs.getString(BAUD_RATE, "115200"))){
-				Log.v(TAG, "Baud rate changed, exiting application.");
-				System.exit(0);
-			}
-			//Refresh wakelock
-			releaseWakelocks();
-			acquireProperWakelock();
-		}
-	}
-		
-	@Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle item selection
-        switch (item.getItemId()) {
-        case R.id.action_settings:
-        	Intent i = new Intent(this, Settings.class);
-			startActivityForResult(i, PREFS_CHANGED);
-        	return true;
-        default:
-            return super.onOptionsItemSelected(item);
-        }
-	}
-	
 	//These functions all use the UI handler and thus can be called from outside
 	//the UI thread context.
 	void sendUIMessage(int what, Object obj){
@@ -265,11 +262,13 @@ public class MainActivity extends Activity {
 		}
 	}
 	
+	// Endpoint handling code
 	IOEndpointAndroidSerial serialEndpoint;
 	IOEndpointSocket socketEndpoint;
 	EndpointConnector connector;
 	int number_messages = 0;
 	
+	// Routes serial endpoint messages to the UI.
 	class MavEndpointListener implements EndpointListener{
 		@Override
 		public void messageSent() {
@@ -290,6 +289,7 @@ public class MainActivity extends Activity {
 		}
 	}
 	
+	// Routes networking endpoint messages to the UI.
 	class DownlinkEndpointListener implements EndpointListener{
 		@Override
 		public void messageSent() {
@@ -311,9 +311,10 @@ public class MainActivity extends Activity {
 		}
 	}
 	
+	// Initializes the Endpoints
 	void initializeLinkComponents(){
-		SharedPreferences prefs = getPreferences(0);
-		int baud = Integer.parseInt(prefs.getString(BAUD_RATE, "115200"));
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		int baud = Integer.parseInt(prefs.getString(BAUD_RATE, DEFAULT_BAUD));
 		serialEndpoint = new IOEndpointAndroidSerial(this, baud);
 		serialEndpoint.setEndpointListener(new MavEndpointListener());
 		socketEndpoint = new IOEndpointSocket();
@@ -322,10 +323,11 @@ public class MainActivity extends Activity {
 		connector = new EndpointConnector(serialEndpoint, socketEndpoint);
 	}
 	
+	// Starts the linkage between the serial and network endpoints.
 	void startEndpoints(String host, int port){
 		Log.v(TAG, "Toggle downlink ON");
         try{
-        	Log.v(TAG, "Booting up socket/downlink endpoint..");
+        	Log.v(TAG, "Booting up socket/downlink endpoint on host=" + host + " port=" + port);
 			if(!socketEndpoint.connected()){
 				//We'll need to re-connect.
 				if(socketEndpoint.connected()){
@@ -350,6 +352,7 @@ public class MainActivity extends Activity {
         }
 	}
 	
+	// Halts the linkage between the serial and network endpoints.
 	void stopEndpoints(){
 		Log.v(TAG, "Toggle downlink OFF");
 		connector.unbridge();
@@ -361,19 +364,40 @@ public class MainActivity extends Activity {
 		setDownlinkActiveState(false);
 	}
 	
-	int getPrefsPort(){
-		SharedPreferences prefs = getPreferences(0);
-		int port = 9999;
-		try{
-			port = Integer.parseInt(prefs.getString(TCP_PORT, "9999"));
-		}catch(Exception e){
-			e.printStackTrace();
+	// Toggles the endpoints between being linked and not linked.
+	void toggleMapper(final String host, final boolean longPress){
+		if(downlinkActive && onlyDisableOnLongPress && !longPress){
+			alert("You must longpress the button to disable the downlink.");
+			return;
 		}
-		return port;
+		
+		(new Thread(){
+			public void run(){
+    			number_messages = 0;
+				if(!downlinkActive){
+					startEndpoints(host, getPrefsPort());
+				}else if(!onlyDisableOnLongPress || longPress){
+					stopEndpoints();
+				}
+			}
+		}).start();
 	}
 
+	//Settings/Preferences management code.
+	
+	//Shared preferences keys
+	final String USER_DFL_IP = "UserDefaultIP";
+	final String TCP_PORT = "tcp_port";
+	final String BAUD_RATE = "baud_rate";
+	final String DEFAULT_BAUD = "115200";
+	final String SCREEN_KEEPALIVE = "keep_screen_on";
+	
+	// When the screen wakelock is used, this is necessary to prevent unintentional turn-offs.
+	final int wakelockType = PowerManager.SCREEN_DIM_WAKE_LOCK;
+	
+	// Acquires the proper wakelock for the application.
 	void acquireProperWakelock(){
-		SharedPreferences prefs = getPreferences(0);
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		if(prefs.getBoolean(SCREEN_KEEPALIVE, true)){
 			Log.v(TAG, "Acquiring screen wakelock.");
 			screenWakelock.acquire();
@@ -383,32 +407,30 @@ public class MainActivity extends Activity {
 		}
 	}
 	
+	// Releases all wakelocks held by the application.
 	void releaseWakelocks(){
 		Log.v(TAG, "Releasing wakelocks.");
-		screenWakelock.release();
-		cpuWakelock.release();
-	}
-	
-	void toggleMapper(final String host, final boolean longPress){
-		if(downlinkActive && onlyDisableOnLongPress && !longPress){
-			alert("You must longpress the button to disable the downlink.");
-			return;
+		if(screenWakelock.isHeld()){
+			screenWakelock.release();
 		}
-		final int port = getPrefsPort();
-		
-		(new Thread(){
-			public void run(){
-    			number_messages = 0;
-				if(!downlinkActive){
-					connectedPort = port;
-					startEndpoints(host, port);
-				}else if(!onlyDisableOnLongPress || longPress){
-					stopEndpoints();
-				}
-			}
-		}).start();
+		if(cpuWakelock.isHeld()){
+			cpuWakelock.release();
+		}
 	}
 	
+	// Returns the TCP Port that should be used, based on defaults and the current settings.
+	int getPrefsPort(){
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		int port = 9999;
+		try{
+			port = Integer.parseInt(prefs.getString(TCP_PORT, "9999"));
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+		return port;
+	}
+	
+	//The blow code implements a simple text alert dialog box.
 	String _alert_text; //vulnerable to threading..
     void alert(String msg){
     	_alert_text = msg;
